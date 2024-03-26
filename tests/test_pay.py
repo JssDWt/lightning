@@ -1864,6 +1864,7 @@ def test_pay_retry(node_factory, bitcoind, executor, chainparams):
     with pytest.raises(RpcError, match=r'4 attempts'):
         l1.dev_pay(inv, dev_use_shadow=False)
 
+
 @pytest.mark.slow_test
 def test_pay_breez(node_factory, bitcoind, executor, chainparams):
     """Make sure breez infra works properly. """
@@ -1910,8 +1911,8 @@ def test_pay_breez(node_factory, bitcoind, executor, chainparams):
 
     mine_funding_to_announce(bitcoind, [sender, lsp, router1, router2, randomnode])
     wait_for(lambda: len(sender.rpc.listchannels()['channels']) == 7)
- 
-    exhaust_channel(router1, randomnode, scid_router_random)
+
+    exhaust_channel(router1, randomnode, scid_router1_random)
     
     def listpays_nofail(b11):
         while True:
@@ -1932,6 +1933,7 @@ def test_pay_breez(node_factory, bitcoind, executor, chainparams):
 
     # This will not be OK.
     fut.result()
+
 
 @pytest.mark.slow_test
 def test_pay_routeboost(node_factory, bitcoind):
