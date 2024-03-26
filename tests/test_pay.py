@@ -1913,7 +1913,7 @@ def test_pay_breez(node_factory, bitcoind, executor, chainparams):
     wait_for(lambda: len(sender.rpc.listchannels()['channels']) == 7)
 
     exhaust_channel(router1, randomnode, scid_router1_random)
-    
+
     def listpays_nofail(b11):
         while True:
             pays = sender.rpc.listpays(b11)['pays']
