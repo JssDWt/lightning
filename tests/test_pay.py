@@ -1864,6 +1864,74 @@ def test_pay_retry(node_factory, bitcoind, executor, chainparams):
     with pytest.raises(RpcError, match=r'4 attempts'):
         l1.dev_pay(inv, dev_use_shadow=False)
 
+@pytest.mark.slow_test
+def test_pay_breez(node_factory, bitcoind, executor, chainparams):
+    """Make sure breez infra works properly. """
+
+    def exhaust_channel(opener, peer, scid, already_spent=0):
+        """Spend all available capacity (10^6 - 1%) of channel
+        """
+        chan = only_one(opener.rpc.listpeerchannels(peer.info['id'])["channels"])
+        maxpay = chan['spendable_msat']
+        lbl = ''.join(random.choice(string.ascii_letters) for _ in range(20))
+        inv = peer.rpc.invoice(maxpay, lbl, "exhaust_channel")
+        routestep = {
+            'amount_msat': maxpay,
+            'id': peer.info['id'],
+            'delay': 10,
+            'channel': scid
+        }
+        opener.rpc.sendpay([routestep], inv['payment_hash'], payment_secret=inv['payment_secret'])
+        opener.rpc.waitsendpay(inv['payment_hash'])
+
+    sender, lsp, router1, router2, randomnode, dest = node_factory.get_nodes(6, opts={'feerates': (7500, 7500, 7500, 7500)})
+
+    sender.rpc.connect(lsp.info['id'], 'localhost', lsp.port)
+    sender_lsp_scid, _ = sender.fundchannel(lsp, 200000, wait_for_active=False)
+    lsp.rpc.connect(router1.info['id'], 'localhost', router1.port)
+    lsp_router1_scid, _ = lsp.fundchannel(router1, 10**6, wait_for_active=False)
+    lsp.rpc.connect(router2.info['id'], 'localhost', router2.port)
+    lsp_router2_scid, _ = lsp.fundchannel(router2, 10**6, wait_for_active=False)
+    router1.rpc.connect(dest.info['id'], 'localhost', dest.port)
+    router1_dest_scid, _ = router1.fundchannel(dest, 10**6, wait_for_active=False)
+    router2.rpc.connect(dest.info['id'], 'localhost', dest.port)
+    router2_dest_scid, _ = router2.fundchannel(dest, 10**6, wait_for_active=False)
+    router1.rpc.connect(randomnode.info['id'], 'localhost', randomnode.port)
+    scid_router1_random, _ = router1.fundchannel(randomnode, 10**6, wait_for_active=False)
+    randomnode.rpc.connect(dest.info['id'], 'localhost', dest.port)
+    randomnode_dest_scid, _ = randomnode.fundchannel(dest, 10**6, wait_for_active=False)
+
+    lsp.rpc.setchannel(lsp_router1_scid, feebase=0, feeppm=2000, htlcmin=1)
+    lsp.rpc.setchannel(lsp_router2_scid, feebase=0, feeppm=2000, htlcmin=1)
+    router1.rpc.setchannel(router1_dest_scid, feebase=0, feeppm=2000, htlcmin=1)
+    router1.rpc.setchannel(scid_router1_random, feebase=0, feeppm=1, htlcmin=1)
+    router2.rpc.setchannel(router2_dest_scid, feebase=0, feeppm=2000, htlcmin=1)
+    randomnode.rpc.setchannel(randomnode_dest_scid, feebase=0, feeppm=1, htlcmin=1)
+
+    mine_funding_to_announce(bitcoind, [sender, lsp, router1, router2, randomnode])
+    wait_for(lambda: len(sender.rpc.listchannels()['channels']) == 7)
+ 
+    exhaust_channel(router1, randomnode, scid_router_random)
+    
+    def listpays_nofail(b11):
+        while True:
+            pays = sender.rpc.listpays(b11)['pays']
+            if len(pays) != 0:
+                if only_one(pays)['status'] == 'complete':
+                    return
+                assert only_one(pays)['status'] != 'failed'
+
+    inv = dest.rpc.invoice(150000000, 'test_breez', 'test_breez')
+
+    # Make sure listpays doesn't transiently show failure while pay
+    # is retrying.
+    fut = executor.submit(listpays_nofail, inv['bolt11'])
+
+    # Pay sender->dest should succeed via non-depleted channel
+    sender.dev_pay(inv['bolt11'], dev_use_shadow=False)
+
+    # This will not be OK.
+    fut.result()
 
 @pytest.mark.slow_test
 def test_pay_routeboost(node_factory, bitcoind):
