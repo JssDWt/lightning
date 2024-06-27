@@ -102,4 +102,8 @@ void add_node_announcement_sig(u8 *nannounce,
  */
 bool node_announcement_same(const u8 *nann1, const u8 *nann2);
 
+/**
+ * get_nannounce_timestamp: Get the node_announcement timestamp.
+ */
+u32 get_nannounce_timestamp(const u8 *node_announcement);
 #endif /* LIGHTNING_LIGHTNINGD_GOSSIP_GENERATION_H */

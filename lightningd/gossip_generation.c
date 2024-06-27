@@ -305,7 +305,7 @@ static void get_nannounce_parts(const u8 *node_announcement,
 }
 
 /* Get timestamp of a (valid!) node_announcement  */
-static u32 get_nannounce_timestamp(const u8 *node_announcement)
+u32 get_nannounce_timestamp(const u8 *node_announcement)
 {
 	const u8 *p;
 	u16 flen;

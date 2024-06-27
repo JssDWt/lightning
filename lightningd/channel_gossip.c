@@ -1095,11 +1095,15 @@ void channel_gossip_node_announce(struct lightningd *ld)
 	if (!gossipd_init_done)
 		return;
 
+	u32 now = time_now().ts.tv_sec;
 	nannounce = unsigned_node_announcement(tmpctx, ld, ld->node_announcement);
-
-	/* Don't bother with duplicates */
+	
+	/* Don't bother with duplicates, except if the node announcement is 
+	 * outdated */
 	if (ld->node_announcement
-	    && node_announcement_same(ld->node_announcement, nannounce))
+	    && node_announcement_same(ld->node_announcement, nannounce)
+		&& get_nannounce_timestamp(ld->node_announcement) + (
+			GOSSIP_PRUNE_INTERVAL(ld->dev_fast_gossip_prune) / 3) > now)
 		return;
 
 	/* Ask hsmd to sign it (synchronous) */
