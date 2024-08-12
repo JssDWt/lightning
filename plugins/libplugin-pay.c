@@ -2516,7 +2516,6 @@ local_channel_hints_listpeerchannels(struct command *cmd, const char *buffer,
 				     const jsmntok_t *toks, struct payment *p)
 {
 	struct listpeers_channel **chans;
-	trace_span_resume(p);
 	chans = json_to_listpeers_channels(tmpctx, buffer, toks);
 
 	for (size_t i = 0; i < tal_count(chans); i++) {
@@ -2583,7 +2582,6 @@ static void local_channel_hints_cb(void *d UNUSED, struct payment *p)
 		return payment_continue(p);
 
 	trace_span_start("local_channel_hints_cb", p);
-	trace_span_suspend(p);
 	req = jsonrpc_request_start(p->plugin, NULL, "listpeerchannels",
 				    local_channel_hints_listpeerchannels,
 				    local_channel_hints_listpeerchannels, p);
@@ -3437,7 +3435,6 @@ static struct command_result *direct_pay_listpeerchannels(struct command *cmd,
 							  const jsmntok_t *toks,
 							  struct payment *p)
 {
-	trace_span_resume(p);
 	struct listpeers_channel **channels = json_to_listpeers_channels(tmpctx, buffer, toks);
 	struct direct_pay_data *d = payment_mod_directpay_get_data(p);
 
@@ -3489,7 +3486,6 @@ static void direct_pay_cb(struct direct_pay_data *d, struct payment *p)
 
 
 	trace_span_start("direct_pay_cb", p);
-	trace_span_suspend(p);
 	req = jsonrpc_request_start(p->plugin, NULL, "listpeerchannels",
 				    direct_pay_listpeerchannels,
 				    direct_pay_listpeerchannels,
