@@ -2276,7 +2276,7 @@ void payment_continue(struct payment *p)
 	mod = p->modifiers[p->current_modifier];
 
 	if (mod != NULL) {
-		char str[2];
+		char str[12];
 		sprintf(str, "%d", p->current_modifier);
 		trace_span_tag(p, "modifier", str);
 		trace_span_end(p);

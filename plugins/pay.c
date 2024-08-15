@@ -14,6 +14,7 @@
 #include <common/json_stream.h>
 #include <common/memleak.h>
 #include <common/pseudorand.h>
+#include <common/trace.h>
 #include <plugins/libplugin-pay.h>
 #include <stdio.h>
 
