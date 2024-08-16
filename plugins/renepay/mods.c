@@ -660,7 +660,6 @@ static struct command_result *routehints_done(struct command *cmd UNUSED,
 	assert(payment);
 	assert(payment->local_gossmods);
 
-	trace_span_start("routehints_done", payment);
 	const struct node_id *destination = &payment->payment_info.destination;
 	const struct route_info **routehints = payment->payment_info.routehints;
 	assert(routehints);
@@ -691,16 +690,13 @@ static struct command_result *routehints_done(struct command *cmd UNUSED,
 			   "been ignored.",
 			   __PRETTY_FUNCTION__, skipped_count);
 
-	trace_span_end(payment);
 	return payment_continue(payment);
 }
 
 static struct command_result *routehints_cb(struct payment *payment)
 {
-	trace_span_start("routehints_cb", payment);
 	struct command *cmd = payment_command(payment);
 	assert(cmd);
-	trace_span_end(payment);
 	struct out_req *req = jsonrpc_request_start(
 	    cmd->plugin, cmd, "waitblockheight", routehints_done,
 	    payment_rpc_failure, payment);
