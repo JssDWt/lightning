@@ -10,9 +10,11 @@
 #include <common/memleak.h>
 #include <common/pseudorand.h>
 #include <common/random_select.h>
+#include <common/trace.h>
 #include <errno.h>
 #include <math.h>
 #include <plugins/libplugin-pay.h>
+#include <stdio.h>
 #include <sys/types.h>
 #include <wire/peer_wire.h>
 
@@ -797,6 +799,7 @@ static bool dst_is_excluded(const struct gossmap *gossmap,
 		if (node_id_eq(&dstid, &nodes[i]))
 			return true;
 	}
+
 	return false;
 }
 
@@ -933,6 +936,7 @@ static struct route_hop *route(const tal_t *ctx,
 			       struct payment *p,
 			       const char **errmsg)
 {
+	trace_span_start("route", src);
 	const struct dijkstra *dij;
 	struct route_hop *r;
 	bool (*can_carry)(const struct gossmap *,
@@ -942,19 +946,28 @@ static struct route_hop *route(const tal_t *ctx,
 			  struct payment *);
 
 	can_carry = payment_route_can_carry;
+	trace_span_start("route-dijkstra", dst);
 	dij = dijkstra(tmpctx, gossmap, dst, amount, riskfactor,
 		       can_carry, route_score, p);
+	trace_span_end(dst);
+	trace_span_start("route_from_dijkstra", dst);
 	r = route_from_dijkstra(ctx, gossmap, dij, src, amount, final_delay);
+	trace_span_end(dst);
 	if (!r) {
 		/* Try using disabled channels too */
 		/* FIXME: is there somewhere we can annotate this for paystatus? */
 		can_carry = payment_route_can_carry_even_disabled;
+		trace_span_start("!r-dijkstra", dst);
 		dij = dijkstra(tmpctx, gossmap, dst, amount, riskfactor,
 			       can_carry, route_score, p);
+		trace_span_end(dst);
+		trace_span_start("!r-route_from_dijkstra", dst);
 		r = route_from_dijkstra(ctx, gossmap, dij, src,
 					amount, final_delay);
+		trace_span_end(dst);
 		if (!r) {
 			*errmsg = "No path found";
+			trace_span_end(src);
 			return NULL;
 		}
 	}
@@ -962,13 +975,18 @@ static struct route_hop *route(const tal_t *ctx,
 	/* If it's too far, fall back to using shortest path. */
 	if (tal_count(r) > max_hops) {
 		tal_free(r);
+		trace_span_start(">max_hops-dijkstra", dst);
 		/* FIXME: is there somewhere we can annotate this for paystatus? */
 		dij = dijkstra(tmpctx, gossmap, dst, amount, riskfactor,
 			       can_carry, route_score_shorter, p);
+		trace_span_end(dst);
+		trace_span_start(">max_hops-route_from_dijkstra", dst);
 		r = route_from_dijkstra(ctx, gossmap, dij, src,
 					amount, final_delay);
+		trace_span_end(dst);
 		if (!r) {
 			*errmsg = "No path found";
+			trace_span_end(src);
 			return NULL;
 		}
 
@@ -976,11 +994,13 @@ static struct route_hop *route(const tal_t *ctx,
 		if (tal_count(r) > max_hops) {
 			*errmsg = tal_fmt(ctx, "Shortest path found was length %zu",
 					  tal_count(r));
+			trace_span_end(src);
 			return tal_free(r);
 		}
 	}
 
 	*errmsg = NULL;
+	trace_span_end(src);
 	return r;
 }
 
@@ -995,9 +1015,13 @@ static struct command_result *payment_getroute(struct payment *p)
 	 * free an eventual stale route. */
 	p->route = tal_free(p->route);
 
+	trace_span_start("get_gossmap", p->plugin);
 	gossmap = get_gossmap(p);
+	trace_span_end(p->plugin);
 
+	trace_span_start("gossmap_find_node->dst", p->plugin);
 	dst = gossmap_find_node(gossmap, p->getroute->destination);
+	trace_span_end(p->plugin);
 	if (!dst) {
 		put_gossmap(p);
 		payment_fail(
@@ -1008,8 +1032,10 @@ static struct command_result *payment_getroute(struct payment *p)
 		return command_still_pending(p->cmd);
 	}
 
+	trace_span_start("gossmap_find_node->src", p->plugin);
 	/* If we don't exist in gossip, routing can't happen. */
 	src = gossmap_find_node(gossmap, p->local_id);
+	trace_span_end(p->plugin);
 	if (!src) {
 		put_gossmap(p);
 		payment_fail(p, "We don't have any channels");
@@ -1018,10 +1044,15 @@ static struct command_result *payment_getroute(struct payment *p)
 		return command_still_pending(p->cmd);
 	}
 
+	trace_span_start("route", p->plugin);
 	p->route = route(p, gossmap, src, dst, p->getroute->amount, p->getroute->cltv,
 			 p->getroute->riskfactorppm / 1000000.0, p->getroute->max_hops,
 			 p, &errstr);
+	trace_span_end(p->plugin);
+
+	trace_span_start("put_gossmap", p->plugin);
 	put_gossmap(p);
+	trace_span_end(p->plugin);
 
 	if (!p->route) {
 		payment_fail(p, "%s", errstr);
@@ -2425,6 +2456,18 @@ static void payment_finished(struct payment *p)
 	}
 }
 
+const char * const payment_step_str[] =
+{
+    [PAYMENT_STEP_INITIALIZED] = "PAYMENT_STEP_INITIALIZED",
+    [PAYMENT_STEP_GOT_ROUTE] = "PAYMENT_STEP_GOT_ROUTE",
+    [PAYMENT_STEP_RETRY_GETROUTE]  = "PAYMENT_STEP_RETRY_GETROUTE",
+    [PAYMENT_STEP_ONION_PAYLOAD]  = "PAYMENT_STEP_ONION_PAYLOAD",
+    [PAYMENT_STEP_SPLIT] = "PAYMENT_STEP_SPLIT",
+    [PAYMENT_STEP_RETRY] = "PAYMENT_STEP_RETRY",
+    [PAYMENT_STEP_FAILED]  = "PAYMENT_STEP_FAILED",
+    [PAYMENT_STEP_SUCCESS]  = "PAYMENT_STEP_SUCCESS",
+};
+
 void payment_set_step(struct payment *p, enum payment_step newstep)
 {
 	p->current_modifier = -1;
@@ -2439,12 +2482,18 @@ void payment_continue(struct payment *p)
 {
 	struct payment_modifier *mod;
 	void *moddata;
+
+	trace_span_start("payment_continue", p);
+	trace_span_tag(p, "step", payment_step_str[p->step]);
 	/* If we are in the middle of calling the modifiers, continue calling
 	 * them, otherwise we can continue with the payment state-machine. */
 	p->current_modifier++;
 	mod = p->modifiers[p->current_modifier];
 
 	if (mod != NULL) {
+		char *str = tal_fmt(tmpctx, "%d", p->current_modifier);
+		trace_span_tag(p, "modifier", str);
+		trace_span_end(p);
 		/* There is another modifier, so call it. */
 		moddata = p->modifier_data[p->current_modifier];
 		return mod->post_step_cb(moddata, p);
@@ -2452,6 +2501,7 @@ void payment_continue(struct payment *p)
 		/* There are no more modifiers, so reset the call chain and
 		 * proceed to the next state. */
 		p->current_modifier = -1;
+		trace_span_end(p);
 		switch (p->step) {
 		case PAYMENT_STEP_INITIALIZED:
 		case PAYMENT_STEP_RETRY_GETROUTE:
@@ -2478,6 +2528,7 @@ void payment_continue(struct payment *p)
 			return;
 		}
 	}
+	trace_span_end(p);
 	/* We should never get here, it'd mean one of the state machine called
 	 * `payment_continue` after the final state. */
 	abort();
@@ -3057,6 +3108,7 @@ static void routehint_pre_getroute(struct routehints_data *d, struct payment *p)
 
 static void routehint_check_reachable(struct payment *p)
 {
+	trace_span_start("routehint_check_reachable", p);
 	const struct gossmap_node *dst, *src;
 	struct gossmap *gossmap = get_gossmap(p);
 	const struct dijkstra *dij;
@@ -3068,8 +3120,11 @@ static void routehint_check_reachable(struct payment *p)
 	 * whether we stand any chance of reaching the destination
 	 * without routehints. This will later be used to mix in
 	 * attempts without routehints. */
+	trace_span_start("gossmap_find_node", p->plugin);
 	src = gossmap_find_node(gossmap, p->local_id);
-	dst = gossmap_find_node(gossmap, p->route_destination);
+	dst = gossmap_find_node(gossmap, p->pay_destination);
+	trace_span_end(p->plugin);
+	trace_span_start("dijkstra", p->plugin);
 	if (dst == NULL)
 		d->destination_reachable = false;
 	else if (src != NULL) {
@@ -3089,6 +3144,7 @@ static void routehint_check_reachable(struct payment *p)
 			   "Allowing direct attempts");
 		d->destination_reachable = true;
 	}
+	trace_span_end(p->plugin);
 
 	if (d->destination_reachable) {
 		tal_arr_expand(&d->routehints, NULL);
@@ -3109,6 +3165,7 @@ static void routehint_check_reachable(struct payment *p)
 		 * isn't reachable, then there is no point in
 		 * continuing. */
 
+		trace_span_end(p);
 		payment_abort(
 		    p,
 		    PAY_UNREACHABLE,
@@ -3119,7 +3176,9 @@ static void routehint_check_reachable(struct payment *p)
 		return;
 	}
 
+	trace_span_start("routehint_pre_getroute", p->plugin);
 	routehint_pre_getroute(d, p);
+	trace_span_end(p->plugin);
 	put_gossmap(p);
 
 	paymod_log(p, LOG_DBG,
@@ -3128,26 +3187,35 @@ static void routehint_check_reachable(struct payment *p)
 		   d->destination_reachable ? "" : " not",
 		   d->destination_reachable ? "including" : "excluding");
 
+	trace_span_end(p);
 	/* Now we can continue on our merry way. */
 	payment_continue(p);
 }
 
 static void routehint_step_cb(struct routehints_data *d, struct payment *p)
 {
+	trace_span_start("routehint_step_cb", d);
 	struct route_hop hop;
 	const struct payment *root = payment_root(p);
 	struct gossmap *map;
 	if (p->step == PAYMENT_STEP_INITIALIZED) {
-		if (root->routes == NULL)
+		if (root->routes == NULL) {
+			trace_span_tag(d, "end_position", "root->routes == NULL");
+			trace_span_end(d);
 			return payment_continue(p);
+		}
 
 		/* We filter out non-functional routehints once at the
 		 * beginning, and every other payment will filter out the
 		 * exluded ones on the fly. */
 		if (p->parent == NULL) {
+			trace_span_start("get_gossmap", p->plugin);
 			map = get_gossmap(p);
+			trace_span_end(p->plugin);
+			trace_span_start("filter_routehints", p->plugin);
 			d->routehints = filter_routehints(
 			    map, p, d, p->local_id, p->routes);
+			trace_span_end(p->plugin);
 			/* filter_routehints modifies the array, but
 			 * this could trigger a resize and the resize
 			 * could trigger a realloc.
@@ -3168,16 +3236,19 @@ static void routehint_step_cb(struct routehints_data *d, struct payment *p)
 			 * in paymod, paymod should use (and mutate) the
 			 * p->routes array, and
 			 */
+			trace_span_start("put_gossmap", p->plugin);
 			put_gossmap(p);
+			trace_span_end(p->plugin);
 			p->routes = d->routehints;
 
 			paymod_log(p, LOG_DBG,
 				   "After filtering routehints we're left with "
 				   "%zu usable hints",
 				   tal_count(d->routehints));
-			    /* Do not continue normally, instead go and check if
-			     * we can reach the destination directly. */
-			    return routehint_check_reachable(p);
+			/* Do not continue normally, instead go and check if
+			* we can reach the destination directly. */
+			trace_span_end(d);
+			return routehint_check_reachable(p);
 		}
 
 		routehint_pre_getroute(d, p);
@@ -3213,6 +3284,7 @@ static void routehint_step_cb(struct routehints_data *d, struct payment *p)
 		}
 	}
 
+	trace_span_end(d);
 	payment_continue(p);
 }
 
