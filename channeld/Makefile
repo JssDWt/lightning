@@ -90,6 +90,7 @@ CHANNELD_COMMON_OBJS :=				\
 	common/status_wire.o			\
 	common/subdaemon.o			\
 	common/timeout.o			\
+	common/trace.o			\
 	common/utils.o				\
 	common/utxo.o				\
 	common/version.o			\
