@@ -390,6 +390,7 @@ static void channel_hints_update(struct payment *p,
 	struct payment *root = payment_root(p);
 	struct channel_hint newhint;
 
+	trace_span_start("channel_hints_update", p);
 	/* If the channel is marked as enabled it must have an estimate. */
 	assert(!enabled || estimated_capacity != NULL);
 
@@ -428,6 +429,8 @@ static void channel_hints_update(struct payment *p,
 					   hint->enabled ? "true" : "false",
 					   fmt_amount_msat(tmpctx,
 						hint->estimated_capacity));
+			
+			trace_span_end(p);
 			return;
 		}
 	}
@@ -453,6 +456,7 @@ static void channel_hints_update(struct payment *p,
 	    fmt_short_channel_id_dir(tmpctx, &newhint.scid),
 	    newhint.enabled ? "true" : "false",
 	    fmt_amount_msat(tmpctx, newhint.estimated_capacity));
+	trace_span_end(p);
 }
 
 static void payment_exclude_most_expensive(struct payment *p)
@@ -2528,7 +2532,7 @@ local_channel_hints_listpeerchannels(struct command *cmd, const char *buffer,
 				     const jsmntok_t *toks, struct payment *p)
 {
 	struct listpeers_channel **chans;
-
+	trace_span_start("local_channel_hints_listpeerchannels", p);
 	chans = json_to_listpeers_channels(tmpctx, buffer, toks);
 
 	for (size_t i = 0; i < tal_count(chans); i++) {
@@ -2578,6 +2582,7 @@ local_channel_hints_listpeerchannels(struct command *cmd, const char *buffer,
 		}
 	}
 
+	trace_span_end(p);
 	payment_continue(p);
 	return command_still_pending(cmd);
 }
@@ -2869,6 +2874,7 @@ struct node_id *routehint_generate_exclusion_list(const tal_t *ctx,
  * routehint entry point. */
 static void routehint_pre_getroute(struct routehints_data *d, struct payment *p)
 {
+	trace_span_start("routehint_pre_getroute", d);
 	bool have_more;
 	d->current_routehint = next_routehint(d, p);
 
@@ -2901,10 +2907,12 @@ static void routehint_pre_getroute(struct routehints_data *d, struct payment *p)
 		p->temp_exclusion = routehint_generate_exclusion_list(p, d->current_routehint, p);
 	} else
 		paymod_log(p, LOG_DBG, "Not using a routehint");
+	trace_span_end(d);
 }
 
 static void routehint_check_reachable(struct payment *p)
 {
+	trace_span_start("routehint_check_reachable", p);
 	const struct gossmap_node *dst, *src;
 	struct gossmap *gossmap = get_gossmap(p);
 	const struct dijkstra *dij;
@@ -2957,6 +2965,7 @@ static void routehint_check_reachable(struct payment *p)
 		 * isn't reachable, then there is no point in
 		 * continuing. */
 
+		trace_span_end(p);
 		payment_abort(
 		    p,
 		    "Destination %s is not reachable directly and "
@@ -2975,18 +2984,22 @@ static void routehint_check_reachable(struct payment *p)
 		   d->destination_reachable ? "" : " not",
 		   d->destination_reachable ? "including" : "excluding");
 
+	trace_span_end(p);
 	/* Now we can continue on our merry way. */
 	payment_continue(p);
 }
 
 static void routehint_step_cb(struct routehints_data *d, struct payment *p)
 {
+	trace_span_start("routehint_step_cb", d);
 	struct route_hop hop;
 	const struct payment *root = payment_root(p);
 	struct gossmap *map;
 	if (p->step == PAYMENT_STEP_INITIALIZED) {
-		if (root->routes == NULL)
+		if (root->routes == NULL) {
+			trace_span_end(d);
 			return payment_continue(p);
+		}
 
 		/* We filter out non-functional routehints once at the
 		 * beginning, and every other payment will filter out the
@@ -3022,9 +3035,10 @@ static void routehint_step_cb(struct routehints_data *d, struct payment *p)
 				   "After filtering routehints we're left with "
 				   "%zu usable hints",
 				   tal_count(d->routehints));
-			    /* Do not continue normally, instead go and check if
-			     * we can reach the destination directly. */
-			    return routehint_check_reachable(p);
+			/* Do not continue normally, instead go and check if
+				* we can reach the destination directly. */
+			trace_span_end(d);
+			return routehint_check_reachable(p);
 		}
 
 		routehint_pre_getroute(d, p);
@@ -3040,6 +3054,7 @@ static void routehint_step_cb(struct routehints_data *d, struct payment *p)
 					    tal_count(routehint) - i - 1)) {
 				/* Just let it fail, since we couldn't stitch
 				 * the routes together. */
+				trace_span_end(d);
 				return payment_continue(p);
 			}
 
@@ -3060,6 +3075,7 @@ static void routehint_step_cb(struct routehints_data *d, struct payment *p)
 		}
 	}
 
+	trace_span_end(d);
 	payment_continue(p);
 }
 
@@ -3384,6 +3400,7 @@ REGISTER_PAYMENT_MODIFIER(shadowroute, struct shadow_route_data *,
 
 static void direct_pay_override(struct payment *p) {
 
+	trace_span_start("direct_pay_override", p);
 	/* The root has performed the search for a direct channel. */
 	struct payment *root = payment_root(p);
 	struct direct_pay_data *d;
@@ -3393,8 +3410,10 @@ static void direct_pay_override(struct payment *p) {
 	 * anything. */
 	d = payment_mod_directpay_get_data(root);
 
-	if (d->chan == NULL)
+	if (d->chan == NULL) {
+		trace_span_end(p);
 		return payment_continue(p);
+	}
 
 	/* If we have a channel we need to make sure that it still has
 	 * sufficient capacity. Look it up in the channel_hints. */
@@ -3424,7 +3443,7 @@ static void direct_pay_override(struct payment *p) {
 		payment_set_step(p, PAYMENT_STEP_GOT_ROUTE);
 	}
 
-
+	trace_span_end(p);
 	payment_continue(p);
 }
 
@@ -3436,6 +3455,7 @@ static struct command_result *direct_pay_listpeerchannels(struct command *cmd,
 							  const jsmntok_t *toks,
 							  struct payment *p)
 {
+	trace_span_start("direct_pay_listpeerchannels", p);
 	struct listpeers_channel **channels = json_to_listpeers_channels(tmpctx, buffer, toks);
 	struct direct_pay_data *d = payment_mod_directpay_get_data(p);
 
@@ -3472,6 +3492,7 @@ static struct command_result *direct_pay_listpeerchannels(struct command *cmd,
 							 gossmod_add_localchan,
 							 NULL);
 
+	trace_span_end(p);
 	direct_pay_override(p);
 	return command_still_pending(cmd);
 
