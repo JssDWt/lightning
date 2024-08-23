@@ -821,7 +821,7 @@ static void NON_NULL_ARGS(1, 2, 4, 5) json_add_channel(struct lightningd *ld,
 	const struct peer_update *peer_update;
 	u32 feerate;
 
-	trace_span_start("json_add_channel", response);
+	trace_span_start("json_add_channel", channel);
 	json_object_start(response, key);
 	json_add_node_id(response, "peer_id", &peer->id);
 	json_add_bool(response, "peer_connected", peer->connected == PEER_CONNECTED);
@@ -1209,7 +1209,7 @@ static void NON_NULL_ARGS(1, 2, 4, 5) json_add_channel(struct lightningd *ld,
 
 	json_add_htlcs(ld, response, channel);
 	json_object_end(response);
-	trace_span_end(response);
+	trace_span_end(channel);
 }
 
 struct peer_connected_hook_payload {
