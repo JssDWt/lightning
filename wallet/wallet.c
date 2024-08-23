@@ -2080,8 +2080,10 @@ void wallet_channel_stats_load(struct wallet *w,
 			       u64 id,
 			       struct channel_stats *stats)
 {
+	trace_span_start("wallet_channel_stats_load", w);
 	struct db_stmt *stmt;
 	int res;
+	trace_span_suspend(w);
 	stmt = db_prepare_v2(w->db, SQL(
 				     "SELECT"
 				     "   in_payments_offered,  in_payments_fulfilled"
@@ -2094,7 +2096,7 @@ void wallet_channel_stats_load(struct wallet *w,
 	db_query_prepared(stmt);
 
 	res = db_step(stmt);
-
+	trace_span_resume(w);
 	/* This must succeed, since we know the channel exists */
 	assert(res);
 
@@ -2119,6 +2121,7 @@ void wallet_channel_stats_load(struct wallet *w,
 				      &stats->out_msatoshi_fulfilled,
 				      AMOUNT_MSAT(0));
 	tal_free(stmt);
+	trace_span_end(w);
 }
 
 void wallet_blocks_heights(struct wallet *w, u32 def, u32 *min, u32 *max)
@@ -2520,10 +2523,12 @@ struct state_change_entry *wallet_state_change_get(const tal_t *ctx,
 						   struct wallet *w,
 						   u64 channel_id)
 {
+	trace_span_start("wallet_state_change_get", w);
 	struct db_stmt *stmt;
 	struct state_change_entry tmp;
 	struct state_change_entry *res = tal_arr(ctx,
 						 struct state_change_entry, 0);
+	trace_span_suspend(w);
 	stmt = db_prepare_v2(
 	    w->db, SQL("SELECT"
 		       " timestamp,"
@@ -2545,7 +2550,9 @@ struct state_change_entry *wallet_state_change_get(const tal_t *ctx,
 		tmp.message = db_col_strdup(res, stmt, "message");
 		tal_arr_expand(&res, tmp);
 	}
+	trace_span_resume(w);
 	tal_free(stmt);
+	trace_span_end(w);
 	return res;
 }
 

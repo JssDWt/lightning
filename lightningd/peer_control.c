@@ -29,6 +29,7 @@
 #include <common/shutdown_scriptpubkey.h>
 #include <common/status.h>
 #include <common/timeout.h>
+#include <common/trace.h>
 #include <common/utils.h>
 #include <common/version.h>
 #include <common/wire_error.h>
@@ -820,6 +821,7 @@ static void NON_NULL_ARGS(1, 2, 4, 5) json_add_channel(struct lightningd *ld,
 	const struct peer_update *peer_update;
 	u32 feerate;
 
+	trace_span_start("json_add_channel", channel);
 	json_object_start(response, key);
 	json_add_node_id(response, "peer_id", &peer->id);
 	json_add_bool(response, "peer_connected", peer->connected == PEER_CONNECTED);
@@ -1207,6 +1209,7 @@ static void NON_NULL_ARGS(1, 2, 4, 5) json_add_channel(struct lightningd *ld,
 
 	json_add_htlcs(ld, response, channel);
 	json_object_end(response);
+	trace_span_end(channel);
 }
 
 struct peer_connected_hook_payload {
@@ -2363,6 +2366,7 @@ static void json_add_peerchannels(struct lightningd *ld,
 {
 	struct channel *channel;
 
+	trace_span_start("json_add_peerchannels", peer);
 	json_add_uncommitted_channel(response, peer->uncommitted_channel, peer);
 	list_for_each(&peer->channels, channel, list) {
 		if (channel_state_uncommitted(channel->state))
@@ -2370,6 +2374,7 @@ static void json_add_peerchannels(struct lightningd *ld,
 		else
 			json_add_channel(ld, response, NULL, channel, peer);
 	}
+	trace_span_end(peer);
 }
 
 static struct command_result *json_listpeerchannels(struct command *cmd,
@@ -2381,11 +2386,14 @@ static struct command_result *json_listpeerchannels(struct command *cmd,
 	struct peer *peer;
 	struct json_stream *response;
 
+	trace_span_start("json_listpeerchannels", cmd);
 	/* FIME: filter by status */
 	if (!param(cmd, buffer, params,
 		   p_opt("id", param_node_id, &peer_id),
-		   NULL))
+		   NULL)) {
+		trace_span_end(cmd);
 		return command_param_failed();
+	}
 
 	response = json_stream_success(cmd);
 	json_array_start(response, "channels");
@@ -2406,6 +2414,7 @@ static struct command_result *json_listpeerchannels(struct command *cmd,
 
 	json_array_end(response);
 
+	trace_span_end(cmd);
 	return command_success(cmd, response);
 }
 

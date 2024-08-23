@@ -14,6 +14,7 @@
 #include <common/json_param.h>
 #include <common/psbt_open.h>
 #include <common/shutdown_scriptpubkey.h>
+#include <common/trace.h>
 #include <common/wire_error.h>
 #include <connectd/connectd_wiregen.h>
 #include <errno.h>
@@ -120,6 +121,7 @@ void json_add_unsaved_channel(struct json_stream *response,
 	if (!channel->owner)
 		return;
 
+	trace_span_start("json_add_unsaved_channel", channel);
 	oa = channel->open_attempt;
 
 	json_object_start(response, NULL);
@@ -167,6 +169,7 @@ void json_add_unsaved_channel(struct json_stream *response,
 
 	json_array_end(response);
 	json_object_end(response);
+	trace_span_end(channel);
 }
 
 struct rbf_channel_payload {

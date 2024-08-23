@@ -13,6 +13,7 @@
 #include <common/json_param.h>
 #include <common/memleak.h>
 #include <common/scb_wiregen.h>
+#include <common/trace.h>
 #include <connectd/connectd_wiregen.h>
 #include <errno.h>
 #include <hsmd/permissions.h>
@@ -44,6 +45,7 @@ void json_add_uncommitted_channel(struct json_stream *response,
 	if (!uc->fc)
 		return;
 
+	trace_span_start("json_add_uncommitted_channel", uc);
 	json_object_start(response, NULL);
 	json_add_node_id(response, "peer_id", &peer->id);
 	json_add_bool(response, "peer_connected", peer->connected == PEER_CONNECTED);
@@ -83,6 +85,7 @@ void json_add_uncommitted_channel(struct json_stream *response,
 
 	json_array_end(response);
 	json_object_end(response);
+	trace_span_end(uc);
 }
 
 /* Steals fields from uncommitted_channel: returns NULL if can't generate a
