@@ -390,7 +390,7 @@ static void channel_hints_update(struct payment *p,
 	struct payment *root = payment_root(p);
 	struct channel_hint newhint;
 
-	trace_span_start("channel_hints_update", p);
+	trace_span_start("channel_hints_update", &newhint);
 	/* If the channel is marked as enabled it must have an estimate. */
 	assert(!enabled || estimated_capacity != NULL);
 
@@ -430,7 +430,7 @@ static void channel_hints_update(struct payment *p,
 					   fmt_amount_msat(tmpctx,
 						hint->estimated_capacity));
 			
-			trace_span_end(p);
+			trace_span_end(&newhint);
 			return;
 		}
 	}
@@ -456,7 +456,7 @@ static void channel_hints_update(struct payment *p,
 	    fmt_short_channel_id_dir(tmpctx, &newhint.scid),
 	    newhint.enabled ? "true" : "false",
 	    fmt_amount_msat(tmpctx, newhint.estimated_capacity));
-	trace_span_end(p);
+	trace_span_end(&newhint);
 }
 
 static void payment_exclude_most_expensive(struct payment *p)
