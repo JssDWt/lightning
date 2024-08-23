@@ -1,4 +1,5 @@
 #include "config.h"
+#include "../../common/trace.c"
 #include "../invoice.c"
 #include "../peer_control.c"
 #include "../routehint.c"
