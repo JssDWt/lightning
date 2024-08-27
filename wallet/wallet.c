@@ -2696,7 +2696,6 @@ struct channel_state_change_map *wallet_state_changes_peer_get(const tal_t *ctx,
 					  struct wallet *w,
 					  u64 peer_id) {
 	struct db_stmt *stmt;
-	struct state_change_entry tmp;
 	struct state_change_list *curr_list;
 	u64 *curr = NULL;
 	u64 *prev = NULL;
@@ -2721,6 +2720,7 @@ struct channel_state_change_map *wallet_state_changes_peer_get(const tal_t *ctx,
 	db_query_prepared(stmt);
 
 	while (db_step(stmt)) {
+		struct state_change_entry tmp;
 		u64 t = db_col_u64(stmt, "s.channel_id");
 		curr = &t;
 		if (!prev || *curr != *prev) {
@@ -2745,7 +2745,6 @@ struct channel_state_change_map *wallet_state_changes_peer_get(const tal_t *ctx,
 struct channel_state_change_map *wallet_state_changes_get(const tal_t *ctx,
 					  struct wallet *w) {
 	struct db_stmt *stmt;
-	struct state_change_entry tmp;
 	struct state_change_list *curr_list;
 	u64 *curr = NULL;
 	u64 *prev = NULL;
@@ -2769,6 +2768,7 @@ struct channel_state_change_map *wallet_state_changes_get(const tal_t *ctx,
 	db_query_prepared(stmt);
 
 	while (db_step(stmt)) {
+		struct state_change_entry tmp;
 		u64 t = db_col_u64(stmt, "s.channel_id");
 		curr = &t;
 		if (!prev || *curr != *prev) {
