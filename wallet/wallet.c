@@ -2781,6 +2781,7 @@ struct channel_state_change_map *wallet_state_changes_get(const tal_t *ctx,
 		tmp.old_state = db_col_int(stmt, "s.old_state");
 		tmp.new_state = db_col_int(stmt, "s.new_state");
 		tmp.cause = state_change_in_db(db_col_int(stmt, "s.cause"));
+		log_debug(w->log, "BBBB: cause: %u", db_col_int(stmt, "s.cause"));
 		tmp.message = db_col_strdup(curr_list->entries, stmt, "s.message");
 		tal_arr_expand(&curr_list->entries, tmp);
 		prev = curr;
