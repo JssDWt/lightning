@@ -70,7 +70,6 @@
 #include <openingd/openingd_wiregen.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <wallet/wallet.h>
 #include <wally_bip32.h>
 #include <wire/onion_wire.h>
 #include <wire/wire_sync.h>
