@@ -2394,10 +2394,15 @@ static void json_add_peerchannels(struct command *cmd,
 				state_changes_map, &channel->dbid);
 			if (state_change_list)
 				state_changes = &state_change_list->entries;
+			else
+			 	state_changes = NULL;
+
 			channel_stats_list = channel_stats_map_get(
 				channel_stats_map, &channel->dbid);
 			if (channel_stats_list)
 				channel_stats = channel_stats_list->stats;
+			else
+			 	channel_stats = NULL;
 			json_add_channel(cmd, response, NULL, channel, peer,
 					 state_changes, channel_stats);
 		}
