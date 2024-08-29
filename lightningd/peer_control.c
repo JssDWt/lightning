@@ -818,7 +818,7 @@ static void NON_NULL_ARGS(1, 2, 4, 5) json_add_channel(struct command *cmd,
 						       const char *key,
 						       const struct channel *channel,
 						       const struct peer *peer,
-						       struct state_change_entry *state_changes,
+						       struct state_change_entry **state_changes,
 						       struct channel_stats *channel_stats)
 {
 	struct lightningd *ld = cmd->ld;
@@ -1166,25 +1166,25 @@ static void NON_NULL_ARGS(1, 2, 4, 5) json_add_channel(struct command *cmd,
 
 	json_array_start(response, "state_changes");
 	if (state_changes) {
-		for (size_t i = 0; i < tal_count(state_changes); i++) {
+		for (size_t i = 0; i < tal_count(*state_changes); i++) {
 			json_object_start(response, NULL);
 			json_add_timeiso(response, "timestamp",
-					state_changes[i].timestamp);
+					state_changes[i]->timestamp);
 			json_add_string(response, "old_state",
 					channel_state_str(
-						state_changes[i].old_state));
+						state_changes[i]->old_state));
 			json_add_string(response, "new_state",
 					channel_state_str(
-						state_changes[i].new_state));
+						state_changes[i]->new_state));
 			log_debug(ld->log, "AAAA: old_state: %u (%s), new_state: %u (%s), cause: %u, message: %s", 
-			state_changes[i].old_state, channel_state_str(
-						state_changes[i].old_state), state_changes[i].new_state, channel_state_str(
-						state_changes[i].new_state), state_changes[i].cause, state_changes[i].message);
+			state_changes[i]->old_state, channel_state_str(
+						state_changes[i]->old_state), state_changes[i]->new_state, channel_state_str(
+						state_changes[i]->new_state), state_changes[i]->cause, state_changes[i]->message);
 			json_add_string(response, "cause",
 					channel_change_state_reason_str(
-						state_changes[i].cause));
+						state_changes[i]->cause));
 			json_add_string(response, "message",
-					state_changes[i].message);
+					state_changes[i]->message);
 			json_object_end(response);
 		}
 	}
@@ -2381,7 +2381,7 @@ static void json_add_peerchannels(struct command *cmd,
 {
 	struct channel *channel;
 	struct state_change_list *state_change_list;
-	struct state_change_entry *state_changes;
+	struct state_change_entry **state_changes;
 	struct channel_stats_list *channel_stats_list;
 	struct channel_stats *channel_stats;
 
@@ -2400,7 +2400,7 @@ static void json_add_peerchannels(struct command *cmd,
 			if (channel_stats_list)
 				channel_stats = channel_stats_list->stats;
 			json_add_channel(cmd, response, NULL, channel, peer,
-					 state_changes, channel_stats);
+					 &state_changes, channel_stats);
 		}
 	}
 }
