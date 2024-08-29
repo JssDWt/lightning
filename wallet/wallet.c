@@ -2641,39 +2641,6 @@ void wallet_state_change_add(struct wallet *w,
 	db_exec_prepared_v2(take(stmt));
 }
 
-struct state_change_entry *wallet_state_change_get(const tal_t *ctx,
-						   struct wallet *w,
-						   u64 channel_id)
-{
-	struct db_stmt *stmt;
-	struct state_change_entry tmp;
-	struct state_change_entry *res = tal_arr(ctx,
-						 struct state_change_entry, 0);
-	stmt = db_prepare_v2(
-	    w->db, SQL("SELECT"
-		       " timestamp,"
-		       " old_state,"
-		       " new_state,"
-		       " cause,"
-		       " message "
-		       "FROM channel_state_changes "
-		       "WHERE channel_id = ? "
-		       "ORDER BY timestamp ASC;"));
-	db_bind_int(stmt, channel_id);
-	db_query_prepared(stmt);
-
-	while (db_step(stmt)) {
-		tmp.timestamp = db_col_timeabs(stmt, "timestamp");
-		tmp.old_state = db_col_int(stmt, "old_state");
-		tmp.new_state = db_col_int(stmt, "new_state");
-		tmp.cause = state_change_in_db(db_col_int(stmt, "cause"));
-		tmp.message = db_col_strdup(res, stmt, "message");
-		tal_arr_expand(&res, tmp);
-	}
-	tal_free(stmt);
-	return res;
-}
-
 size_t state_change_list_hash(const u64 *out)
 {
 	struct siphash24_ctx ctx;

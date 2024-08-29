@@ -670,13 +670,6 @@ void wallet_state_change_add(struct wallet *w,
 			     enum state_change cause,
 			     const char *message);
 
-/**
- * Gets all state change history entries for a channel from the database
- */
-struct state_change_entry *wallet_state_change_get(const tal_t *ctx,
-						   struct wallet *w,
-						   u64 channel_id);
-
 struct state_change_list {
 	u64 channel_id;
 	struct state_change_entry *entries;
