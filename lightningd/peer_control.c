@@ -2392,7 +2392,7 @@ static void json_add_peerchannels(struct command *cmd,
 		else {
 			state_change_list = channel_state_change_map_get(
 				state_changes_map, &channel->dbid);
-			log_debug(cmd->ld->log, "scid in state change list is %llu", state_change_list->channel_id);
+			log_debug(cmd->ld->log, "scid in state change list is %"PRIu64"", state_change_list->channel_id);
 			if (state_change_list)
 				state_changes = state_change_list->entries;
 			channel_stats_list = channel_stats_map_get(
