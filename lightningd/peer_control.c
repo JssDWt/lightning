@@ -2451,6 +2451,8 @@ static struct command_result *json_listpeerchannels(struct command *cmd,
 	}
 
 	json_array_end(response);
+	tal_free(state_changes_map);
+	tal_free(channel_stats_map);
 
 	return command_success(cmd, response);
 }
