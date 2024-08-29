@@ -2381,7 +2381,7 @@ static void json_add_peerchannels(struct command *cmd,
 {
 	struct channel *channel;
 	struct state_change_list *state_change_list;
-	struct state_change_entry *state_changes;
+	struct state_change_entry **state_changes;
 	struct channel_stats_list *channel_stats_list;
 	struct channel_stats *channel_stats;
 
@@ -2393,13 +2393,13 @@ static void json_add_peerchannels(struct command *cmd,
 			state_change_list = channel_state_change_map_get(
 				state_changes_map, &channel->dbid);
 			if (state_change_list)
-				state_changes = state_change_list->entries;
+				state_changes = &state_change_list->entries;
 			channel_stats_list = channel_stats_map_get(
 				channel_stats_map, &channel->dbid);
 			if (channel_stats_list)
 				channel_stats = channel_stats_list->stats;
 			json_add_channel(cmd, response, NULL, channel, peer,
-					 &state_changes, channel_stats);
+					 state_changes, channel_stats);
 		}
 	}
 }
