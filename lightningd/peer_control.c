@@ -1176,10 +1176,6 @@ static void NON_NULL_ARGS(1, 2, 4, 5) json_add_channel(struct command *cmd,
 			json_add_string(response, "new_state",
 					channel_state_str(
 						(*state_changes)[i].new_state));
-			log_debug(ld->log, "AAAA: old_state: %u (%s), new_state: %u (%s), cause: %u, message: %s", 
-			(*state_changes)[i].old_state, channel_state_str(
-						(*state_changes)[i].old_state), (*state_changes)[i].new_state, channel_state_str(
-						(*state_changes)[i].new_state), (*state_changes)[i].cause, (*state_changes)[i].message);
 			json_add_string(response, "cause",
 					channel_change_state_reason_str(
 						(*state_changes)[i].cause));
