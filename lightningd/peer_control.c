@@ -2381,7 +2381,7 @@ static void json_add_peerchannels(struct command *cmd,
 {
 	struct channel *channel;
 	struct state_change_list *state_change_list;
-	struct state_change_entry **state_changes;
+	struct state_change_entry *state_changes;
 	struct channel_stats_list *channel_stats_list;
 	struct channel_stats *channel_stats;
 
