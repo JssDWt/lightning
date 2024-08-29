@@ -1,3 +1,4 @@
+#include "ccan/tal/tal.h"
 #include "config.h"
 #include <arpa/inet.h>
 #include <bitcoin/feerate.h>
@@ -1172,11 +1173,13 @@ static void NON_NULL_ARGS(1, 2, 4, 5) json_add_channel(struct command *cmd,
 			json_add_string(response, "old_state",
 					channel_state_str(
 						state_changes[i].old_state));
-			
 			json_add_string(response, "new_state",
 					channel_state_str(
 						state_changes[i].new_state));
-			log_debug(ld->log, "AAAA: cause: %u", state_changes[i].cause);
+			log_debug(ld->log, "AAAA: old_state: %u (%s), new_state: %u (%s), cause: %u, message: %s", 
+			state_changes[i].old_state, channel_state_str(
+						state_changes[i].old_state), state_changes[i].new_state, channel_state_str(
+						state_changes[i].new_state), state_changes[i].cause, state_changes[i].message);
 			json_add_string(response, "cause",
 					channel_change_state_reason_str(
 						state_changes[i].cause));
@@ -2389,6 +2392,7 @@ static void json_add_peerchannels(struct command *cmd,
 		else {
 			state_change_list = channel_state_change_map_get(
 				state_changes_map, &channel->dbid);
+			log_debug(cmd->ld->log, "scid in state change list is %llu", state_change_list->channel_id);
 			if (state_change_list)
 				state_changes = state_change_list->entries;
 			channel_stats_list = channel_stats_map_get(
@@ -2426,8 +2430,10 @@ static struct command_result *json_listpeerchannels(struct command *cmd,
 		if (peer) {
 			state_changes_map = wallet_state_changes_peer_get(
 				tmpctx, cmd->ld->wallet, peer->dbid);
+			log_debug(cmd->ld->log, "state changes map has %zu elements", state_changes_map->raw.elems);
 			channel_stats_map = wallet_channel_stats_peer_get(
 				cmd->ld->wallet, peer->dbid);
+			log_debug(cmd->ld->log, "channel stats map has %zu elements", channel_stats_map->raw.elems);
 			json_add_peerchannels(cmd, response, peer,
 				state_changes_map, channel_stats_map);
 		}
