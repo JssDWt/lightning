@@ -1,6 +1,7 @@
 #include "config.h"
 #define TESTING
 #include "../../common/dijkstra.c"
+#include "../../common/trace.c"
 #include "../libplugin-pay.c"
 #include <bitcoin/chainparams.h>
 #include <common/gossip_store.h>
