@@ -348,6 +348,8 @@ struct payment {
 	 * completes successfully. */
 	void (*on_payment_success)(struct payment *p);
 	void (*on_payment_failure)(struct payment *p);
+
+	struct listpeers_channel **listpeerchannels_cache;
 };
 
 struct payment_modifier {

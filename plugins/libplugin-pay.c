@@ -62,6 +62,96 @@ static void put_gossmap(struct payment *payment)
 	gossmap_remove_localmods(global_gossmap, payment->mods);
 }
 
+struct rpc_data {
+	struct payment *p;
+	struct command_result *(*cb)(struct command *command, 
+				     const char *buf,
+				     const jsmntok_t *result,
+				     void *arg);
+	struct command_result *(*errcb)(struct command *command, 
+					const char *buf,
+					const jsmntok_t *result,
+					void *arg);
+};
+
+
+static struct command_result *ensure_listpeerchannels_cached_cb(struct command *cmd,
+								const char *buffer,
+								const jsmntok_t *toks,
+								struct rpc_data *data)
+{
+	struct payment *p = data->p;
+	struct payment *root = payment_root(p);
+	struct command_result *(*cb)(struct command *cmd,
+				 const char *buf,
+				 const jsmntok_t *toks,
+				 void *arg) = data->cb;
+	tal_free(data);
+	
+	root->listpeerchannels_cache = json_to_listpeers_channels(root, buffer, toks);
+	root->mods = gossmods_from_listpeerchannels(
+		root, root->local_id, buffer, toks, true, gossmod_add_localchan, NULL);
+
+	// Call the original callback passed into ensure_listpeerchannels_cached.
+	return cb(p->cmd, buffer, toks, p);
+}
+
+static struct command_result *ensure_listpeerchannels_cached_errcb(struct command *cmd,
+								const char *buffer,
+								const jsmntok_t *toks,
+								struct rpc_data *data)
+{
+	struct payment *p = data->p;
+	struct command_result *(*errcb)(struct command *cmd,
+					const char *buf,
+					const jsmntok_t *toks,
+					void *arg) = data->errcb;
+	tal_free(data);
+	// Call the original callback passed into ensure_listpeerchannels_cached.
+	return errcb(p->cmd, buffer, toks, p);
+
+}
+
+#define ensure_listpeerchannels_cached(p, cb, errcb)				\
+    ensure_listpeerchannels_cached_((p),					\
+    			typesafe_cb_preargs(struct command_result *, void *,	\
+					 (cb), (p),				\
+					 struct command *command,		\
+					 const char *buf,			\
+					 const jsmntok_t *result),      	\
+			typesafe_cb_preargs(struct command_result *, void *,	\
+					 (errcb), (p),				\
+					 struct command *command,		\
+					 const char *buf,			\
+					 const jsmntok_t *result))
+
+static struct command_result *ensure_listpeerchannels_cached_(struct payment *p,
+			struct command_result *(*cb)(struct command *cmd,
+					const char *buf,
+					const jsmntok_t *toks,
+					void *arg),
+			struct command_result *(*errcb)(struct command *cmd,
+					const char *buf,
+					const jsmntok_t *toks,
+					void *arg)) {
+
+	struct payment *root = payment_root(p);
+	if (root->listpeerchannels_cache != NULL)
+		return cb(p->cmd, NULL, NULL, p);
+
+	struct out_req *req;
+	struct rpc_data *data = tal(p, struct rpc_data);
+	data->p = p;
+	data->cb = cb;
+	data->errcb = errcb;
+	
+	req = jsonrpc_request_start(p->plugin, NULL, "listpeerchannels",
+			ensure_listpeerchannels_cached_cb,
+			ensure_listpeerchannels_cached_errcb,
+			data);
+	return send_outreq(p->plugin, req);
+}
+
 int libplugin_pay_poll(struct pollfd *fds, nfds_t nfds, int timeout)
 {
 	assert(!got_gossmap);
@@ -98,6 +188,7 @@ struct payment *payment_new(tal_t *ctx, struct command *cmd,
 	p->on_payment_success = NULL;
 	p->on_payment_failure = NULL;
 	p->errorcode = 0;
+	p->listpeerchannels_cache = NULL;
 
 	/* Copy over the relevant pieces of information. */
 	if (parent != NULL) {
@@ -1065,44 +1156,26 @@ static struct command_result *payment_getroute(struct payment *p)
  * pay as a preflight test.  Returns `false` on errors, otherwise
  * `sum` contains the sum of all channel balances.*/
 static bool payment_listpeerchannels_balance_sum(struct payment *p,
-						 const char *buf,
-						 const jsmntok_t *toks,
 						 struct amount_msat *sum)
 {
 	*sum = AMOUNT_MSAT(0);
-	const jsmntok_t *channels, *channel;
 	struct amount_msat spendable;
-	bool connected;
-	size_t i;
-	const char *err;
-
-	channels = json_get_member(buf, toks, "channels");
-
-	json_for_each_arr(i, channel, channels)
-	{
-		err = json_scan(tmpctx, buf, channel,
-				"{spendable_msat?:%,peer_connected:%}",
-				JSON_SCAN(json_to_msat, &spendable),
-				JSON_SCAN(json_to_bool, &connected));
-		if (err) {
-			paymod_log(p, LOG_UNUSUAL,
-				   "Bad listpeerchannels.channels %zu: %s", i,
-				   err);
-			return false;
-		}
+	struct listpeers_channel **channels = payment_root(p)->listpeerchannels_cache;
+	for (size_t i = 0; i < tal_count(channels); i++) {
+	spendable = channels[i]->spendable_msat;
 
 		if (!amount_msat_add(sum, *sum, spendable)) {
-			paymod_log(
-			    p, LOG_BROKEN,
-			    "Integer sum overflow summing spendable amounts.");
+			paymod_log(p, LOG_BROKEN,
+				"Integer sum overflow summing spendable amounts.");
 			return false;
 		}
 	}
+
 	return true;
 }
 
 static struct command_result *
-payment_listpeerchannels_success(struct command *cmd, const char *buffer,
+payment_listpeerchannels_success(struct command *cmd, const char *buf,
 				 const jsmntok_t *toks, struct payment *p)
 {
 	/* The maximum amount we may end up trying to send. This
@@ -1117,10 +1190,7 @@ payment_listpeerchannels_success(struct command *cmd, const char *buffer,
 		return payment_getroute(p);
 	}
 
-	p->mods = gossmods_from_listpeerchannels(
-	    p, p->local_id, buffer, toks, true, gossmod_add_localchan, NULL);
-	if (!payment_listpeerchannels_balance_sum(p, buffer, toks,
-						  &spendable)) {
+	if (!payment_listpeerchannels_balance_sum(p, &spendable)) {
 		paymod_log(p, LOG_UNUSUAL,
 			   "Unable to get total spendable amount from "
 			   "listpeerchannels. Skipping affordability check.");
@@ -1164,16 +1234,12 @@ payment_listpeerchannels_success(struct command *cmd, const char *buffer,
 
 static struct command_result *payment_getlocalmods(struct payment *p)
 {
-	struct out_req *req;
-
 	/* Don't call listpeerchannels if we already have mods */
 	if (p->mods)
 		return payment_getroute(p);
 
-	req = jsonrpc_request_start(p->plugin, NULL, "listpeerchannels",
-				    &payment_listpeerchannels_success,
-				    &payment_rpc_failure, p);
-	return send_outreq(p->plugin, req);
+	return ensure_listpeerchannels_cached(p, payment_listpeerchannels_success, 
+				payment_rpc_failure);
 }
 
 static struct payment_result *tal_sendpay_result_from_json(const tal_t *ctx,
@@ -2662,10 +2728,7 @@ static struct command_result *
 local_channel_hints_listpeerchannels(struct command *cmd, const char *buffer,
 				     const jsmntok_t *toks, struct payment *p)
 {
-	struct listpeers_channel **chans;
-
-	chans = json_to_listpeers_channels(tmpctx, buffer, toks);
-
+	struct listpeers_channel **chans = payment_root(p)->listpeerchannels_cache;
 	for (size_t i = 0; i < tal_count(chans); i++) {
 		bool enabled;
 		u16 htlc_budget;
@@ -2719,7 +2782,6 @@ local_channel_hints_listpeerchannels(struct command *cmd, const char *buffer,
 
 static void local_channel_hints_cb(void *d UNUSED, struct payment *p)
 {
-	struct out_req *req;
 	/* If we are not the root we don't look up the channel balances since
 	 * it is unlikely that the capacities have changed much since the root
 	 * payment looked at them. We also only call `listpeers` when the
@@ -2728,10 +2790,8 @@ static void local_channel_hints_cb(void *d UNUSED, struct payment *p)
 	if (p->parent != NULL || p->step != PAYMENT_STEP_INITIALIZED)
 		return payment_continue(p);
 
-	req = jsonrpc_request_start(p->plugin, NULL, "listpeerchannels",
-				    local_channel_hints_listpeerchannels,
-				    local_channel_hints_listpeerchannels, p);
-	send_outreq(p->plugin, req);
+	ensure_listpeerchannels_cached(p, local_channel_hints_listpeerchannels, 
+			 local_channel_hints_listpeerchannels);
 }
 
 REGISTER_PAYMENT_MODIFIER(local_channel_hints, void *, NULL, local_channel_hints_cb);
@@ -3570,9 +3630,8 @@ static struct command_result *direct_pay_listpeerchannels(struct command *cmd,
 							  const jsmntok_t *toks,
 							  struct payment *p)
 {
-	struct listpeers_channel **channels = json_to_listpeers_channels(tmpctx, buffer, toks);
 	struct direct_pay_data *d = payment_mod_directpay_get_data(p);
-
+	struct listpeers_channel **channels = payment_root(p)->listpeerchannels_cache;
 	for (size_t i=0; i<tal_count(channels); i++) {
 		struct listpeers_channel *chan = channels[i];
 
@@ -3599,13 +3658,6 @@ static struct command_result *direct_pay_listpeerchannels(struct command *cmd,
 		d->chan->dir = chan->direction;
 	}
 
-	/* We may still need local mods! */
-	if (!p->mods)
-		p->mods = gossmods_from_listpeerchannels(p, p->local_id,
-							 buffer, toks, true,
-							 gossmod_add_localchan,
-							 NULL);
-
 	direct_pay_override(p);
 	return command_still_pending(cmd);
 
@@ -3613,19 +3665,12 @@ static struct command_result *direct_pay_listpeerchannels(struct command *cmd,
 
 static void direct_pay_cb(struct direct_pay_data *d, struct payment *p)
 {
-	struct out_req *req;
-
 /* Look up the direct channel only on root. */
 	if (p->step != PAYMENT_STEP_INITIALIZED)
 		return payment_continue(p);
 
-
-
-	req = jsonrpc_request_start(p->plugin, NULL, "listpeerchannels",
-				    direct_pay_listpeerchannels,
-				    direct_pay_listpeerchannels,
-				    p);
-	send_outreq(p->plugin, req);
+	ensure_listpeerchannels_cached(p, direct_pay_listpeerchannels, 
+			 direct_pay_listpeerchannels);
 }
 
 static struct direct_pay_data *direct_pay_init(struct payment *p)
