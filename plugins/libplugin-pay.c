@@ -89,8 +89,8 @@ static struct command_result *ensure_listpeerchannels_cached_cb(struct command *
 	tal_free(data);
 	
 	root->listpeerchannels_cache = json_to_listpeers_channels(root, buffer, toks);
-	root->mods = gossmods_from_listpeerchannels(
-		root, root->local_id, buffer, toks, true, gossmod_add_localchan, NULL);
+	p->mods = gossmods_from_listpeerchannels(
+		p, p->local_id, buffer, toks, true, gossmod_add_localchan, NULL);
 
 	// Call the original callback passed into ensure_listpeerchannels_cached.
 	return cb(p->cmd, buffer, toks, p);
