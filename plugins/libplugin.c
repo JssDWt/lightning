@@ -2127,14 +2127,14 @@ static struct plugin *new_plugin(const tal_t *ctx,
 	p->id = name;
 	p->developer = developer;
 	p->deprecated_ok_override = NULL;
-	p->buffer = tal_arr(p, char, 64);
+	p->buffer = tal_arr(p, char, 65536);
 	list_head_init(&p->js_list);
 	p->used = 0;
 	p->len_read = 0;
 	jsmn_init(&p->parser);
 	p->toks = toks_alloc(p);
 	/* Async RPC */
-	p->rpc_buffer = tal_arr(p, char, 64);
+	p->rpc_buffer = tal_arr(p, char, 65536);
 	list_head_init(&p->rpc_js_list);
 	p->rpc_used = 0;
 	p->rpc_read_offset = 0;
