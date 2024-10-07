@@ -1310,7 +1310,7 @@ static struct io_plan *jcon_connected(struct io_conn *conn,
 	jcon->conn = conn;
 	jcon->ld = ld;
 	jcon->used = 0;
-	jcon->buffer = tal_arr(jcon, char, 64);
+	jcon->buffer = tal_arr(jcon, char, 65536);
 	jcon->js_arr = tal_arr(jcon, struct json_stream *, 0);
 	jcon->len_read = 0;
 	jsmn_init(&jcon->input_parser);

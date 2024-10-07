@@ -39,7 +39,7 @@ struct json_out *json_out_new(const tal_t *ctx)
 
 	if (!jout)
 		return NULL;
-	pool = tal_arr(jout, char, 64);
+	pool = tal_arr(jout, char, 65536);
 	if (!pool)
 		return tal_free(jout);
 

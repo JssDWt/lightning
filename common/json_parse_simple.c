@@ -497,7 +497,7 @@ void toks_reset(jsmntok_t *toks)
 
 jsmntok_t *toks_alloc(const tal_t *ctx)
 {
-	jsmntok_t *toks = tal_arr(ctx, jsmntok_t, 10);
+	jsmntok_t *toks = tal_arr(ctx, jsmntok_t, 100);
 	toks_reset(toks);
 	return toks;
 }
