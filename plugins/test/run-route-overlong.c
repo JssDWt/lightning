@@ -1,5 +1,7 @@
 #include "config.h"
 #include "../libplugin-pay.c"
+#include "../../common/memleak.c"
+#include "../../common/trace.c"
 #include <bitcoin/chainparams.h>
 #include <common/gossip_store.h>
 #include <common/setup.h>
@@ -256,15 +258,6 @@ struct json_stream *jsonrpc_stream_fail(struct command *cmd UNNEEDED,
 /* Generated stub for jsonrpc_stream_success */
 struct json_stream *jsonrpc_stream_success(struct command *cmd UNNEEDED)
 { fprintf(stderr, "jsonrpc_stream_success called!\n"); abort(); }
-/* Generated stub for memleak_add_helper_ */
-void memleak_add_helper_(const tal_t *p UNNEEDED, void (*cb)(struct htable *memtable UNNEEDED,
-						    const tal_t *)){ }
-/* Generated stub for memleak_scan_htable */
-void memleak_scan_htable(struct htable *memtable UNNEEDED, const struct htable *ht UNNEEDED)
-{ fprintf(stderr, "memleak_scan_htable called!\n"); abort(); }
-/* Generated stub for notleak_ */
-void *notleak_(void *ptr UNNEEDED, bool plus_children UNNEEDED)
-{ fprintf(stderr, "notleak_ called!\n"); abort(); }
 /* Generated stub for plugin_err */
 void  plugin_err(struct plugin *p UNNEEDED, const char *fmt UNNEEDED, ...)
 { fprintf(stderr, "plugin_err called!\n"); abort(); }

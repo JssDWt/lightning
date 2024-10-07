@@ -2032,7 +2032,7 @@ const char *plugin_send_getmanifest(struct plugin *p, const char *cmd_id)
 		return tal_fmt(p, "opening pipe: %s", strerror(errno));
 
 	log_debug(p->plugins->log, "started(%u) %s", p->pid, p->cmd);
-	p->buffer = tal_arr(p, char, 64);
+	p->buffer = tal_arr(p, char, 65536);
 	jsmn_init(&p->parser);
 	p->toks = toks_alloc(p);
 
